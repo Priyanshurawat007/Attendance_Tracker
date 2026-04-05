@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 
-// 🔐 Generate Access Token
+// 🔐 Helper: Generate Access Token
 const generateToken = (user) => {
     return jwt.sign(
         { id: user._id, role: user.role },
@@ -12,7 +12,7 @@ const generateToken = (user) => {
     );
 };
 
-// 🧼 Remove sensitive data
+// 🧼 Helper: Remove sensitive data
 const sanitizeUser = (user) => {
     return {
         id: user._id,
@@ -25,7 +25,7 @@ const sanitizeUser = (user) => {
     };
 };
 
-// ✅ 1. CREATE ADMIN
+// ✅ 1. CREATE ADMIN (Initial Setup)
 exports.createAdmin = async (req, res) => {
     try {
         const { name, email, password, secretKey } = req.body;
@@ -53,13 +53,12 @@ exports.createAdmin = async (req, res) => {
             message: "Admin created successfully",
             admin: sanitizeUser(admin)
         });
-
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
 
-// ✅ 2. CREATE STUDENT
+// ✅ 2. CREATE STUDENT (Admin Action)
 exports.createStudent = async (req, res) => {
     try {
         const { name, phone, deskNumber } = req.body;
@@ -93,13 +92,12 @@ exports.createStudent = async (req, res) => {
             message: "Student registered successfully",
             student: sanitizeUser(student)
         });
-
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
 
-// ✅ 3. DELETE STUDENT
+// ✅ 3. DELETE STUDENT (Admin Action)
 exports.deleteStudent = async (req, res) => {
     try {
         const { id } = req.params; 
@@ -121,7 +119,7 @@ exports.deleteStudent = async (req, res) => {
     }
 };
 
-// 👨‍💼 ADMIN LOGIN (Step 1: OTP) - Includes IPv4 Network Fix
+// 👨‍💼 4. ADMIN LOGIN (Step 1: OTP)
 exports.adminLogin = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -136,34 +134,48 @@ exports.adminLogin = async (req, res) => {
         admin.otpExpires = Date.now() + 10 * 60 * 1000;
         await admin.save();
 
-        // ✅ FIXED: Forced IPv4 for Render/Vercel environments
+        // 🚀 NODEMAILER CONFIG WITH IPv4 FIX
         const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: process.env.SMTP_PORT,
+            host: process.env.SMTP_HOST || "smtp.gmail.com",
+            port: process.env.SMTP_PORT || 465,
             secure: true, 
             auth: { 
                 user: process.env.SMTP_USERNAME, 
                 pass: process.env.SMTP_PASSWORD 
             },
             tls: {
-                family: 4 // Forces IPv4 to prevent ENETUNREACH
+                family: 4 // FORCES IPv4 to prevent ENETUNREACH errors on Render/Vercel
             }
         });
 
-        await transporter.sendMail({
-            from: `"Junoon Library Admin" <${process.env.SMTP_FROM}>`,
-            to: admin.email,
-            subject: "Your Admin Verification Code",
-            html: `<h3>Your OTP: ${otp}</h3><p>Valid for 10 minutes.</p>`
-        });
+        // Send Email with sub-try-catch to prevent 500 crashing the whole login
+        try {
+            await transporter.sendMail({
+                from: `"Junoon Library Admin" <${process.env.SMTP_FROM}>`,
+                to: admin.email,
+                subject: "Your Admin Verification Code",
+                html: `
+                    <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd;">
+                        <h2 style="color: #00b894;">Admin Verification</h2>
+                        <p>Your OTP for dashboard access is:</p>
+                        <h1 style="letter-spacing: 5px; color: #333;">${otp}</h1>
+                        <p>This code is valid for 10 minutes. Do not share it with anyone.</p>
+                    </div>
+                `
+            });
+            res.json({ message: "OTP sent to your registered email." });
+        } catch (mailErr) {
+            console.error("Email Transport Error:", mailErr);
+            return res.status(503).json({ error: "Email service unavailable. Please check SMTP settings." });
+        }
 
-        res.json({ message: "OTP sent to your registered email." });
     } catch (err) {
+        console.error("Login Error:", err);
         res.status(500).json({ error: err.message });
     }
 };
 
-// 🔐 VERIFY ADMIN OTP (Step 2)
+// 🔐 5. VERIFY ADMIN OTP (Step 2)
 exports.verifyAdminOTP = async (req, res) => {
     try {
         const { email, otp } = req.body;
@@ -176,6 +188,7 @@ exports.verifyAdminOTP = async (req, res) => {
 
         if (!admin) return res.status(400).json({ message: "Invalid or expired OTP" });
 
+        // Clear OTP after success
         admin.otp = undefined;
         admin.otpExpires = undefined;
         await admin.save();
@@ -190,7 +203,7 @@ exports.verifyAdminOTP = async (req, res) => {
     }
 };
 
-// 🎓 STUDENT LOGIN
+// 🎓 6. STUDENT LOGIN
 exports.studentLogin = async (req, res) => {
     try {
         const { userId, password } = req.body;
@@ -210,7 +223,7 @@ exports.studentLogin = async (req, res) => {
     }
 };
 
-// 🔑 RESET PASSWORD (ADMIN ONLY ACTION)
+// 🔑 7. RESET PASSWORD (Admin Action)
 exports.resetStudentPassword = async (req, res) => {
     try {
         const { userId } = req.params;
@@ -230,7 +243,6 @@ exports.resetStudentPassword = async (req, res) => {
             message: "Password reset successful",
             newPassword
         });
-
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
