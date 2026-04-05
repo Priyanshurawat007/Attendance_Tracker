@@ -59,7 +59,7 @@ exports.createAdmin = async (req, res) => {
     }
 };
 
-// ✅ 2. CREATE STUDENT (Phone as ID + Desk Assignment)
+// ✅ 2. CREATE STUDENT
 exports.createStudent = async (req, res) => {
     try {
         const { name, phone, deskNumber } = req.body;
@@ -68,23 +68,21 @@ exports.createStudent = async (req, res) => {
             return res.status(400).json({ message: "Name, Phone, and Desk Number are required" });
         }
 
-        // Check if phone (userId) is already taken
         const existingStudent = await User.findOne({ userId: phone });
         if (existingStudent) {
             return res.status(400).json({ message: "Student with this phone number already exists" });
         }
 
-        // Check if desk is already occupied
         const deskOccupied = await User.findOne({ deskNumber });
         if (deskOccupied) {
             return res.status(400).json({ message: `Desk ${deskNumber} is already occupied by ${deskOccupied.name}` });
         }
 
-        const hashedPassword = await bcrypt.hash("123456", 10); // Default Password
+        const hashedPassword = await bcrypt.hash("123456", 10); 
 
         const student = await User.create({
             name,
-            userId: phone, // Phone is the Login ID
+            userId: phone, 
             phone,
             deskNumber,
             password: hashedPassword,
@@ -101,10 +99,10 @@ exports.createStudent = async (req, res) => {
     }
 };
 
-// ✅ 3. DELETE STUDENT (Frees up Desk & Phone ID)
+// ✅ 3. DELETE STUDENT
 exports.deleteStudent = async (req, res) => {
     try {
-        const { id } = req.params; // Expecting Mongo ID
+        const { id } = req.params; 
 
         const student = await User.findById(id);
         if (!student) {
@@ -112,7 +110,7 @@ exports.deleteStudent = async (req, res) => {
         }
 
         if (student.role === 'ADMIN') {
-            return res.status(403).json({ message: "Cannot delete an Admin account through this route" });
+            return res.status(403).json({ message: "Cannot delete an Admin account" });
         }
 
         await User.findByIdAndDelete(id);
@@ -123,7 +121,7 @@ exports.deleteStudent = async (req, res) => {
     }
 };
 
-// 👨‍💼 ADMIN LOGIN (Step 1: OTP)
+// 👨‍💼 ADMIN LOGIN (Step 1: OTP) - Includes IPv4 Network Fix
 exports.adminLogin = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -138,15 +136,22 @@ exports.adminLogin = async (req, res) => {
         admin.otpExpires = Date.now() + 10 * 60 * 1000;
         await admin.save();
 
+        // ✅ FIXED: Forced IPv4 for Render/Vercel environments
         const transporter = nodemailer.createTransport({
             host: process.env.SMTP_HOST,
             port: process.env.SMTP_PORT,
-            secure: true,
-            auth: { user: process.env.SMTP_USERNAME, pass: process.env.SMTP_PASSWORD },
+            secure: true, 
+            auth: { 
+                user: process.env.SMTP_USERNAME, 
+                pass: process.env.SMTP_PASSWORD 
+            },
+            tls: {
+                family: 4 // Forces IPv4 to prevent ENETUNREACH
+            }
         });
 
         await transporter.sendMail({
-            from: `"Salon Junction Admin" <${process.env.SMTP_FROM}>`,
+            from: `"Junoon Library Admin" <${process.env.SMTP_FROM}>`,
             to: admin.email,
             subject: "Your Admin Verification Code",
             html: `<h3>Your OTP: ${otp}</h3><p>Valid for 10 minutes.</p>`
@@ -162,7 +167,12 @@ exports.adminLogin = async (req, res) => {
 exports.verifyAdminOTP = async (req, res) => {
     try {
         const { email, otp } = req.body;
-        const admin = await User.findOne({ email, role: 'ADMIN', otp, otpExpires: { $gt: Date.now() } });
+        const admin = await User.findOne({ 
+            email, 
+            role: 'ADMIN', 
+            otp, 
+            otpExpires: { $gt: Date.now() } 
+        });
 
         if (!admin) return res.status(400).json({ message: "Invalid or expired OTP" });
 
@@ -170,7 +180,11 @@ exports.verifyAdminOTP = async (req, res) => {
         admin.otpExpires = undefined;
         await admin.save();
 
-        res.json({ message: "Login successful", token: generateToken(admin), user: sanitizeUser(admin) });
+        res.json({ 
+            message: "Login successful", 
+            token: generateToken(admin), 
+            user: sanitizeUser(admin) 
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -186,7 +200,37 @@ exports.studentLogin = async (req, res) => {
             return res.status(400).json({ message: "Invalid credentials" });
         }
 
-        res.json({ message: "Login successful", token: generateToken(student), user: sanitizeUser(student) });
+        res.json({ 
+            message: "Login successful", 
+            token: generateToken(student), 
+            user: sanitizeUser(student) 
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+// 🔑 RESET PASSWORD (ADMIN ONLY ACTION)
+exports.resetStudentPassword = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        const user = await User.findOne({ userId: userId });
+        if (!user) {
+            return res.status(404).json({ error: "Student not found" });
+        }
+
+        const newPassword = "123456";
+        const hashed = await bcrypt.hash(newPassword, 10);
+
+        user.password = hashed;
+        await user.save();
+
+        res.json({
+            message: "Password reset successful",
+            newPassword
+        });
+
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
