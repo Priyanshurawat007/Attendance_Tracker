@@ -12,6 +12,6 @@ router.post('/create-student', auth, role('ADMIN'), createStudent);
 
 router.get('/dashboard', auth, role('ADMIN'), getDashboard);
 
-router.post('/reset-password/:studentId', auth, role('STUDENT'), resetStudentPassword);
+router.post('/reset-password/:userId', resetStudentPassword);
 
 module.exports = router;
