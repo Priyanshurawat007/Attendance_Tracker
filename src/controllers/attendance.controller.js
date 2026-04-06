@@ -1,14 +1,20 @@
-// controllers/attendance.controller.js
-
 const Attendance = require('../models/attendance.model');
 const User = require('../models/user.model');
-const bcrypt = require('bcryptjs'); // Make sure you have this
+const bcrypt = require('bcryptjs');
+
+/**
+ * HELPER: Get current date in YYYY-MM-DD format (Indian Standard Time)
+ * Ensures that even if the server is in the US, "today" follows India's clock.
+ */
+const getISTDate = () => {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+};
 
 // ✅ CHECK-IN (Protected)
 exports.checkIn = async (req, res) => {
     try {
         const studentId = req.user.id;
-        const today = new Date().toISOString().split('T')[0];
+        const today = getISTDate(); 
 
         let record = await Attendance.findOne({ student: studentId, date: today });
 
@@ -19,7 +25,7 @@ exports.checkIn = async (req, res) => {
         record = await Attendance.create({
             student: studentId,
             date: today,
-            checkIn: new Date(),
+            checkIn: new Date(), // Automatically stored as UTC in MongoDB
             status: 'PRESENT'
         });
 
@@ -34,7 +40,7 @@ exports.checkIn = async (req, res) => {
 exports.checkOut = async (req, res) => {
     try {
         const studentId = req.user.id;
-        const today = new Date().toISOString().split('T')[0];
+        const today = getISTDate();
 
         const record = await Attendance.findOne({ student: studentId, date: today });
 
@@ -48,14 +54,12 @@ exports.checkOut = async (req, res) => {
 
         record.checkOut = new Date();
 
+        // Calculate hours difference (milliseconds to hours)
         const hours = (record.checkOut - record.checkIn) / (1000 * 60 * 60);
         record.totalHours = Number(hours.toFixed(2));
 
-        if (hours < 4) {
-            record.status = 'HALF_DAY';
-        } else {
-            record.status = 'PRESENT';
-        }
+        // Logic: Less than 4 hours is a Half Day
+        record.status = hours < 4 ? 'HALF_DAY' : 'PRESENT';
 
         await record.save();
 
@@ -66,10 +70,7 @@ exports.checkOut = async (req, res) => {
     }
 };
 
-// ✅ GET CALENDAR - NO AUTH REQUIRED NOW
-
-// controllers/attendance.controller.js
-
+// ✅ GET CALENDAR (No Auth Required)
 exports.getStudentCalendar = async (req, res) => {
     try {
         const { studentId, month, year } = req.query;
@@ -89,12 +90,15 @@ exports.getStudentCalendar = async (req, res) => {
         records.forEach(r => {
             map[r.date] = {
                 status: r.status,
+                // Convert UTC timestamps to IST human-readable strings
                 checkIn: r.checkIn ? new Date(r.checkIn).toLocaleTimeString('en-IN', { 
+                    timeZone: 'Asia/Kolkata',
                     hour: '2-digit', 
                     minute: '2-digit',
                     hour12: true 
                 }) : null,
                 checkOut: r.checkOut ? new Date(r.checkOut).toLocaleTimeString('en-IN', { 
+                    timeZone: 'Asia/Kolkata',
                     hour: '2-digit', 
                     minute: '2-digit',
                     hour12: true 
@@ -104,6 +108,7 @@ exports.getStudentCalendar = async (req, res) => {
         });
 
         const calendar = [];
+        // Get total days in the requested month
         const daysInMonth = new Date(year, month, 0).getDate();
 
         for (let i = 1; i <= daysInMonth; i++) {
@@ -126,10 +131,10 @@ exports.getStudentCalendar = async (req, res) => {
     }
 };
 
-// ✅ GET ATTENDANCE PERCENTAGE - NO AUTH REQUIRED NOW
+// ✅ GET ATTENDANCE PERCENTAGE (No Auth Required)
 exports.getAttendancePercentage = async (req, res) => {
     try {
-        const { studentId } = req.query;   // ← Get from query params
+        const { studentId } = req.query;
 
         if (!studentId) {
             return res.status(400).json({ message: "studentId is required" });
@@ -157,7 +162,7 @@ exports.getAttendancePercentage = async (req, res) => {
     }
 };
 
-// CHANGE PASSWORD (You can keep this protected or adjust as needed)
+// ✅ CHANGE PASSWORD (Protected)
 exports.changePassword = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -175,6 +180,7 @@ exports.changePassword = async (req, res) => {
             return res.status(400).json({ message: "Old password incorrect" });
         }
 
+        // Hash the new password before saving
         user.password = await bcrypt.hash(newPassword, 10);
         await user.save();
 
