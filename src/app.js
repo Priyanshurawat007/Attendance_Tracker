@@ -5,7 +5,7 @@ const app = express();
 
 // ✅ USE AN ARRAY FOR MULTIPLE ORIGINS
 const allowedOrigins = [
-  'https://junoonattendancemaker.vercel.app',
+  'https://jununattendancemaker.vercel.app/',
   'http://localhost:5173', // Vite default port
   'http://localhost:3000'  // CRA default port
 ];
