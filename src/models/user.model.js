@@ -10,7 +10,7 @@ const userSchema = new mongoose.Schema({
     // Used for Student Login (Phone Number)
     userId: {
         type: String,
-        unique: true, 
+        unique: true,
         sparse: true, // Important: Allows Admins to exist without a numeric userId
         trim: true
     },
@@ -50,15 +50,17 @@ const userSchema = new mongoose.Schema({
     },
 
     // --- 🔐 2FA / SECURITY FIELDS ---
-    otp: { 
-        type: String 
+    otp: {
+        type: String
     },
-    
-    otpExpires: { 
-        type: Date 
-    }
 
-}, { 
+    otpExpires: {
+        type: Date
+    },
+    twoFactorSecret: { type: String },
+    isTwoFactorEnabled: { type: Boolean, default: false }
+
+}, {
     timestamps: true // Automatically creates createdAt and updatedAt fields
 });
 
